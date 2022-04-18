@@ -2,11 +2,13 @@
 name: DEV - Deploy to Nomad Cluster
 
 on:
-  push:
-    branches: [ develop ]
-    paths-ignore:
-     - '.github/**'
-     - '.nomad/**'
+  issues:
+    types: [opened, edited]
+  #push:
+    #branches: [ develop ]
+    #paths-ignore:
+    # - '.github/**'
+    # - '.nomad/**'
 
 env:
   # Organization Secrets
