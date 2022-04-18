@@ -23,42 +23,29 @@ env:
   DEPLOY_ENV : dev
 
 jobs:
-  build:
-    name: Build and Push Docker Image
+  build-and-push-image:
     runs-on: ubuntu-latest
-
     steps:
-    # 소스 가져오기
     - name: Checkout
       uses: actions/checkout@v2
 
-    # AWS credentials 설정
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Login to DockerHub
+      uses: docker/login-action@v1
       with:
-        aws-access-key-id: ${{ env.AWS_ACCESS_KEY }}
-        aws-secret-access-key: ${{ env.AWS_SECRET_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    # AWS ECR 로그인
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
-  
-    # sha 난수 생성
-    - name: Short sha
-      run: echo "short_sha=`echo ${{ github.sha }} | cut -c1-8`" >> $GITHUB_ENV
+    - name: Build and push
+      id: docker_build
+      uses: docker/build-push-action@v2
+      with:
+        push: true
+        tags: seungkyua/tks-contract:latest
 
-    # Docker 빌드 및 ECR로 Push 진행
-    - name: Build, tag, and push image to Amazon ECR
-      id: build-image
-      env:
-        ECR_REPOSITORY: ${{ steps.login-ecr.outputs.registry }}/ecr-${{ env.DEPLOY_ENV }}-${{ env.APP_NAME }}
-        IMAGE_TAG: DEV_${{ env.APP_NAME }}_${{ env.short_sha }}
-      run: |
-        docker build -f Dockerfile --build-arg ENV=${{ env.DEPLOY_ENV }} .
-        docker push ${ECR_REPOSITORY}:${IMAGE_TAG}
-        echo "::set-output name=image::${ECR_REPOSITORY}:${IMAGE_TAG}"
+    
   deploy:
     needs: build
     name: Deploy to DEV Environment
