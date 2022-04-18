@@ -1,0 +1,95 @@
+
+name: DEV - Deploy to Nomad Cluster
+
+on:
+  push:
+    branches: [ develop ]
+    paths-ignore:
+     - '.github/**'
+     - '.nomad/**'
+
+env:
+  # Organization Secrets
+  AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
+  AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
+  NOMAD_CLUSTER: ${{ secrets.NOMAD_CLUSTER }}
+  #NOMAD_TOKEN: ${{ secrets.DEV_NOMAD_TOKEN }}
+  # Workflow 변수
+  # - 해상 서비스 및 애플리케이션에 맞게 수정 필요
+  APP_NAME: quicklauncher       # Application 이름. Image TAG Prefix로 사용 됨
+  AWS_REGION: ap-northeast-2       # AWS EKS & ECR이 위치한 AWS Region
+  DEPLOY_ENV : dev
+
+jobs:
+  build:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+    # 소스 가져오기
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    # AWS credentials 설정
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ env.AWS_ACCESS_KEY }}
+        aws-secret-access-key: ${{ env.AWS_SECRET_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    # AWS ECR 로그인
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+  
+    # sha 난수 생성
+    - name: Short sha
+      run: echo "short_sha=`echo ${{ github.sha }} | cut -c1-8`" >> $GITHUB_ENV
+
+    # Docker 빌드 및 ECR로 Push 진행
+    - name: Build, tag, and push image to Amazon ECR
+      id: build-image
+      env:
+        ECR_REPOSITORY: ${{ steps.login-ecr.outputs.registry }}/ecr-${{ env.DEPLOY_ENV }}-${{ env.APP_NAME }}
+        IMAGE_TAG: DEV_${{ env.APP_NAME }}_${{ env.short_sha }}
+      run: |
+        docker build -f Dockerfile --build-arg ENV=${{ env.DEPLOY_ENV }} .
+        docker push ${ECR_REPOSITORY}:${IMAGE_TAG}
+        echo "::set-output name=image::${ECR_REPOSITORY}:${IMAGE_TAG}"
+  deploy:
+    needs: build
+    name: Deploy to DEV Environment
+    runs-on: ubuntu-latest
+    
+    steps:    
+    # 소스 가져오기
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    # AWS credentials 설정
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ env.AWS_ACCESS_KEY }}
+        aws-secret-access-key: ${{ env.AWS_SECRET_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    # AWS ECR 로그인
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    # sha 난수 생성
+    - name: Short sha
+      run: echo "short_sha=`echo ${{ github.sha }} | cut -c1-8`" >> $GITHUB_ENV
+
+    # EKS 배포를 위한 Kubeconfig 설정
+    - name: Deploy to Nomad
+      id: deploy-nomad
+      env:
+        ECR_REPOSITORY: ${{ steps.login-ecr.outputs.registry }}/ecr-${{ env.DEPLOY_ENV }}-${{ env.APP_NAME }}
+        IMAGE_TAG: DEV_${{ env.APP_NAME }}_${{ env.short_sha }}
+      run: |
+        chmod +x ./nomad/nomad
+        ./nomad/nomad job run -address=${{ env.NOMAD_CLUSTER }} -var=image=${ECR_REPOSITORY}:${IMAGE_TAG} -var=app-env=${{ env.DEPLOY_ENV }} ./nomad/${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}.nomad
