@@ -44,9 +44,9 @@ jobs:
         push: true
         tags: dae93827/quicklauncher:latest
 
-    
+
   deploy:
-    needs: build
+    
     name: Deploy to DEV Environment
     runs-on: ubuntu-latest
     
