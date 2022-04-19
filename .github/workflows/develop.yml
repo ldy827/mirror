@@ -65,5 +65,7 @@ jobs:
       env:
         IMAGE_TAG: DEV_${{ env.APP_NAME }}_${{ env.short_sha }}
       run: |
-        chmod +x ./nomad/nomad
-        ./nomad/nomad job run -address=${{ env.NOMAD_CLUSTER }} -var=image='dae93827/quicklauncher:latest' -var=app-env=${{ env.DEPLOY_ENV }} ./nomad/${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}.nomad
+        curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+        sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+        sudo apt-get update && sudo apt-get install nomad
+        nomad job run -address=${{ env.NOMAD_CLUSTER }} -var=image='dae93827/quicklauncher:latest' -var=app-env=${{ env.DEPLOY_ENV }} ./nomad/${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}.nomad
